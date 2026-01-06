@@ -1,0 +1,5 @@
+{
+  "name": "NoteSphere 3D",
+  "description": "A visually stunning, immersive 3D sticky-notes workspace built with React, Three.js, and Tailwind CSS. Features realistic paper physics, glassmorphism UI, and natural organization tools.",
+  "requestFramePermissions": []
+}
