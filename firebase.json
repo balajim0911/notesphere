@@ -1,0 +1,8 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-notesphere3d-9ddaf1cd-bfe9-410e-b7cd-fd9088f4035e",
+      "rules": "firestore.rules"
+    }
+  ]
+}

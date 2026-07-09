@@ -20,8 +20,7 @@ export const Toolbar: React.FC = () => {
     activeNoteId,
     deleteNote,
     isGenerating,
-    setIsGenerating,
-    cameraCenter
+    setIsGenerating
   } = useStore();
 
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
@@ -49,13 +48,11 @@ export const Toolbar: React.FC = () => {
   }, [isSortOpen, isCategoryOpen]);
 
   const handleCreate = () => {
-    const [cx, cy] = cameraCenter || [0, 0];
     addNote({ 
       content: '',
       color: COLORS[Math.floor(Math.random() * COLORS.length)].value,
       textureType: 'glass',
-      category: filterCategory || 'Ideas',
-      position: [cx + (Math.random() - 0.5) * 1.5, cy + (Math.random() - 0.5) * 1.5, 0]
+      position: [(Math.random() - 0.5) * 6, (Math.random() - 0.5) * 4, 0]
     });
   };
 
@@ -64,13 +61,9 @@ export const Toolbar: React.FC = () => {
     
     setIsGenerating(true);
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-      if (!apiKey) {
-        throw new Error("Gemini API key is missing. Please configure GEMINI_API_KEY in your settings.");
-      }
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey: (process.env as any).API_KEY });
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3-flash-preview",
         contents: `Generate 3 creative, short, and distinct sticky note ideas about this topic: "${aiPrompt}". Return a JSON array of objects with keys "content", "category", and "color" (use valid hex codes like #60a5fa, #fb7185, #34d399, #fbbf24, #a78bfa). Keep content under 15 words per note.`,
         config: {
           responseMimeType: "application/json",
@@ -91,12 +84,11 @@ export const Toolbar: React.FC = () => {
 
       const ideas = JSON.parse(response.text);
       ideas.forEach((idea: any, index: number) => {
-        const [cx, cy] = cameraCenter || [0, 0];
         addNote({
           content: idea.content,
           category: idea.category,
           color: idea.color,
-          position: [cx + (Math.random() - 0.5) * 2.5, cy + (Math.random() - 0.5) * 2.5, 0],
+          position: [(Math.random() - 0.5) * 8, (Math.random() - 0.5) * 6, 0],
           textureType: 'glass'
         });
       });
@@ -170,39 +162,39 @@ export const Toolbar: React.FC = () => {
         </div>
       )}
 
-      <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[110] flex flex-col items-center gap-4 w-full px-4 sm:px-6 max-w-5xl pointer-events-auto">
-        <div className="glass-premium p-1.5 sm:px-3 sm:py-2.5 rounded-full flex items-center gap-1 sm:gap-2 shadow-2xl border-white/50 dark:border-slate-700/50 backdrop-blur-3xl">
+      <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[110] flex flex-col items-center gap-4 w-full px-6 max-w-5xl pointer-events-auto">
+        <div className="glass-premium px-3 py-2.5 rounded-full flex items-center gap-2 shadow-2xl border-white/50 dark:border-slate-700/50 backdrop-blur-3xl">
           
           <div className="relative group">
-            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-              <Search className="w-3.5 h-3.5 text-black dark:text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+            <div className="absolute inset-y-0 left-3.5 flex items-center pointer-events-none">
+              <Search className="w-4 h-4 text-black dark:text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
             </div>
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
-              className="h-10 pl-8 pr-3 bg-white/50 dark:bg-slate-800/40 rounded-full text-xs font-bold border-none focus:ring-2 focus:ring-indigo-500/50 transition-all w-20 xs:w-24 sm:w-32 md:w-56 placeholder:text-slate-700 dark:text-slate-400 text-black dark:text-white"
+              placeholder="Search notes..."
+              className="h-10 pl-10 pr-4 bg-white/50 dark:bg-slate-800/40 rounded-full text-sm font-bold border-none focus:ring-2 focus:ring-indigo-500/50 transition-all w-32 md:w-56 placeholder:text-slate-700 dark:text-slate-400 text-black dark:text-white"
             />
           </div>
 
-          <div className="w-[1px] h-6 bg-slate-300 dark:bg-slate-700/50 mx-0.5 hidden sm:block" />
+          <div className="w-[1px] h-6 bg-slate-300 dark:bg-slate-700/50 mx-1" />
 
           {/* AI Brainstorm Button */}
           <button
             onClick={() => setIsAIOpen(true)}
-            className="h-10 px-2 sm:px-3.5 rounded-full flex items-center gap-1.5 hover:bg-indigo-600/10 transition-all group relative"
+            className="h-10 px-3.5 rounded-full flex items-center gap-2 hover:bg-indigo-600/10 transition-all group relative"
           >
             <Sparkles className="w-4 h-4 text-black dark:text-indigo-500 group-hover:text-indigo-700 group-hover:scale-125 transition-all" />
             <span className="text-[10px] font-black uppercase tracking-wider hidden md:block text-black dark:text-white group-hover:text-indigo-700 transition-colors">Magic</span>
           </button>
 
-          <div className="w-[1px] h-6 bg-slate-300 dark:bg-slate-700/50 mx-0.5" />
+          <div className="w-[1px] h-6 bg-slate-300 dark:bg-slate-700/50 mx-1" />
 
           <div className="relative" ref={sortMenuRef}>
             <button
               onClick={() => { setIsSortOpen(!isSortOpen); setIsCategoryOpen(false); }}
-              className={`h-10 px-2.5 sm:px-3.5 rounded-full flex items-center gap-1.5 transition-all group ${sortBy !== 'recent' ? 'bg-indigo-600/10' : 'hover:bg-white/40 dark:hover:bg-slate-700/40'}`}
+              className={`h-10 px-3.5 rounded-full flex items-center gap-2 transition-all group ${sortBy !== 'recent' ? 'bg-indigo-600/10' : 'hover:bg-white/40 dark:hover:bg-slate-700/40'}`}
             >
               <SortAsc className={`w-4 h-4 transition-colors ${sortBy !== 'recent' ? 'text-indigo-600' : 'text-black dark:text-slate-300 group-hover:text-indigo-700'}`} />
               <span className={`text-[10px] font-black uppercase tracking-wider hidden md:block transition-colors ${
@@ -229,7 +221,7 @@ export const Toolbar: React.FC = () => {
           <div className="relative" ref={categoryMenuRef}>
             <button
               onClick={() => { setIsCategoryOpen(!isCategoryOpen); setIsSortOpen(false); }}
-              className={`h-10 px-2.5 sm:px-3.5 rounded-full flex items-center gap-1.5 transition-all group ${filterCategory ? 'bg-indigo-600/10' : 'hover:bg-white/40 dark:hover:bg-slate-700/40'}`}
+              className={`h-10 px-3.5 rounded-full flex items-center gap-2 transition-all group ${filterCategory ? 'bg-indigo-600/10' : 'hover:bg-white/40 dark:hover:bg-slate-700/40'}`}
             >
               <Filter className={`w-4 h-4 transition-colors ${filterCategory ? 'text-indigo-600' : 'text-black dark:text-slate-300 group-hover:text-indigo-700'}`} />
               <span className={`text-[10px] font-black uppercase tracking-wider hidden md:block transition-colors ${
@@ -249,21 +241,21 @@ export const Toolbar: React.FC = () => {
 
           <button
             onClick={handleCreate}
-            className="h-10 px-3 sm:pl-4 sm:pr-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full flex items-center gap-2 transition-all shadow-lg active:scale-95 group relative overflow-hidden"
+            className="h-10 pl-4 pr-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full flex items-center gap-2.5 transition-all shadow-lg active:scale-95 group relative overflow-hidden"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-            <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-white hidden sm:block">New</span>
+            <Plus className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-white">New</span>
           </button>
 
-          <div className="w-[1px] h-6 bg-slate-300 dark:bg-slate-700/50 mx-0.5" />
+          <div className="w-[1px] h-6 bg-slate-300 dark:bg-slate-700/50 mx-1" />
 
-          <button onClick={toggleDarkMode} className="p-2 sm:p-2.5 rounded-full hover:bg-white/50 dark:hover:bg-slate-700/50 transition-all text-slate-500">
+          <button onClick={toggleDarkMode} className="p-2.5 rounded-full hover:bg-white/50 dark:hover:bg-slate-700/50 transition-all text-slate-500">
             {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
           </button>
 
           {activeNoteId && (
-            <button onClick={() => deleteNote(activeNoteId)} className="p-2 sm:p-2.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 transition-all animate-in zoom-in">
+            <button onClick={() => deleteNote(activeNoteId)} className="p-2.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 transition-all animate-in zoom-in">
               <Trash2 className="w-4 h-4" />
             </button>
           )}

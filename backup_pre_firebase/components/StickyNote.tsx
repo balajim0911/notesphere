@@ -71,20 +71,19 @@ export const StickyNote: React.FC<StickyNoteProps> = ({ note }) => {
     isDarkMode
   } = useStore();
   
-  const { mouse, raycaster, camera, controls } = useThree() as any;
+  const { mouse, raycaster, camera } = useThree();
   useCursor(hovered || dragging);
 
-  const layerZ = (note.zIndex || 0) * 0.12;
-
-  const plane = useMemo(() => new THREE.Plane(), []);
-  const dragNormal = useRef(new THREE.Vector3(0, 0, 1));
-  const intersectionPoint = useMemo(() => new THREE.Vector3(), []);
+  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), []);
+  const intersectionPoint = new THREE.Vector3();
 
   // Focus Logic: Is this specific note the 'active' one? Is ANY note active?
   const isActive = activeNoteId === note.id;
   const isAnyNoteActive = activeNoteId !== null;
   // A note is 'dimmed' if something else is active and this isn't hovered or active
   const isDimmed = isAnyNoteActive && !isActive && !hovered;
+  
+  const layerZ = (note.zIndex || 0) * 0.45;
 
   const texture = useMemo(() => generateTexture(note.textureType, note.color), [note.textureType, note.color]);
 
@@ -163,60 +162,30 @@ export const StickyNote: React.FC<StickyNoteProps> = ({ note }) => {
       raycaster.setFromCamera(mouse, camera);
       if (raycaster.ray.intersectPlane(plane, intersectionPoint)) {
         const targetPos = intersectionPoint.clone().add(dragOffset.current);
-        if (Number.isFinite(targetPos.x) && Number.isFinite(targetPos.y) && Number.isFinite(targetPos.z)) {
-          // Gently float the note along the screen view vector so it hover/floats closer to camera
-          const liftedTarget = targetPos.clone().addScaledVector(dragNormal.current, 1.2);
-          
-          meshRef.current.position.x = THREE.MathUtils.lerp(meshRef.current.position.x, liftedTarget.x, 0.45);
-          meshRef.current.position.y = THREE.MathUtils.lerp(meshRef.current.position.y, liftedTarget.y, 0.45);
-          meshRef.current.position.z = THREE.MathUtils.lerp(meshRef.current.position.z, liftedTarget.z, 0.3);
-          
-          const dx = liftedTarget.x - meshRef.current.position.x;
-          if (Number.isFinite(dx)) {
-            meshRef.current.rotation.z = THREE.MathUtils.lerp(meshRef.current.rotation.z, dx * 0.35, 0.12);
-          }
-        }
+        meshRef.current.position.x = THREE.MathUtils.lerp(meshRef.current.position.x, targetPos.x, 0.4);
+        meshRef.current.position.y = THREE.MathUtils.lerp(meshRef.current.position.y, targetPos.y, 0.4);
+        meshRef.current.position.z = THREE.MathUtils.lerp(meshRef.current.position.z, layerZ + 2.5, 0.2);
+        meshRef.current.rotation.z = THREE.MathUtils.lerp(meshRef.current.rotation.z, (targetPos.x - meshRef.current.position.x) * 0.3, 0.1);
       }
     } else {
-      const targetZ = (hovered || isActive) ? layerZ + 0.3 : layerZ;
-      const targetX = (Array.isArray(note.position) && Number.isFinite(note.position[0])) ? note.position[0] : 0;
-      const targetY = (Array.isArray(note.position) && Number.isFinite(note.position[1])) ? note.position[1] : 0;
-      
-      meshRef.current.position.x = THREE.MathUtils.lerp(meshRef.current.position.x, targetX + sway, 0.1);
-      meshRef.current.position.y = THREE.MathUtils.lerp(meshRef.current.position.y, targetY + float, 0.1);
+      const targetZ = (hovered || isActive) ? layerZ + 0.6 : layerZ;
+      meshRef.current.position.x = THREE.MathUtils.lerp(meshRef.current.position.x, note.position[0] + sway, 0.1);
+      meshRef.current.position.y = THREE.MathUtils.lerp(meshRef.current.position.y, note.position[1] + float, 0.1);
       meshRef.current.position.z = THREE.MathUtils.lerp(meshRef.current.position.z, targetZ, 0.15);
-      
-      const targetRotZ = (Array.isArray(note.rotation) && Number.isFinite(note.rotation[2])) ? note.rotation[2] : 0;
-      meshRef.current.rotation.z = THREE.MathUtils.lerp(meshRef.current.rotation.z, targetRotZ, 0.1);
+      meshRef.current.rotation.z = THREE.MathUtils.lerp(meshRef.current.rotation.z, note.rotation[2], 0.1);
     }
   });
 
   const handlePointerDown = (e: any) => {
     e.stopPropagation();
-    const isRightOrMiddleClick = e.button === 1 || e.button === 2;
-    
-    if (!isRightOrMiddleClick && meshRef.current) {
-      if (controls) {
-        controls.enabled = false;
-      }
+    if (e.button === 0 && meshRef.current) {
       bringToFront(note.id);
       setActiveNoteId(note.id);
       setDragging(true);
       setIsDraggingNote(true);
-      
-      // Calculate camera normal direction to orient the drag plane parallel to the screen view
-      camera.getWorldDirection(dragNormal.current);
-      dragNormal.current.negate(); // Make it point towards the camera
-      
-      // Set the plane passing through the note's current 3D position, facing the camera
-      plane.setFromNormalAndCoplanarPoint(dragNormal.current, meshRef.current.position);
-
       raycaster.setFromCamera(mouse, camera);
       if (raycaster.ray.intersectPlane(plane, intersectionPoint)) {
         dragOffset.current.copy(meshRef.current.position).sub(intersectionPoint);
-      } else {
-        const fallbackPoint = e.point || new THREE.Vector3();
-        dragOffset.current.copy(meshRef.current.position).sub(fallbackPoint);
       }
       
       const domTarget = e.nativeEvent?.target;
@@ -228,9 +197,6 @@ export const StickyNote: React.FC<StickyNoteProps> = ({ note }) => {
 
   const handlePointerUp = (e: any) => {
     e.stopPropagation();
-    if (controls) {
-      controls.enabled = true;
-    }
     if (dragging && meshRef.current) {
       setDragging(false);
       setIsDraggingNote(false);
@@ -240,28 +206,7 @@ export const StickyNote: React.FC<StickyNoteProps> = ({ note }) => {
         domTarget.releasePointerCapture(e.pointerId);
       }
       
-      // Project final position back onto the Z=0 flat board plane
-      const boardPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-      const landingPoint = new THREE.Vector3();
-      raycaster.setFromCamera(mouse, camera);
-      
-      if (raycaster.ray.intersectPlane(boardPlane, landingPoint)) {
-        if (Number.isFinite(landingPoint.x) && Number.isFinite(landingPoint.y)) {
-          updateNote(note.id, { position: [landingPoint.x, landingPoint.y, 0] });
-        } else {
-          const posX = meshRef.current.position.x;
-          const posY = meshRef.current.position.y;
-          if (Number.isFinite(posX) && Number.isFinite(posY)) {
-            updateNote(note.id, { position: [posX, posY, 0] });
-          }
-        }
-      } else {
-        const posX = meshRef.current.position.x;
-        const posY = meshRef.current.position.y;
-        if (Number.isFinite(posX) && Number.isFinite(posY)) {
-          updateNote(note.id, { position: [posX, posY, 0] });
-        }
-      }
+      updateNote(note.id, { position: [meshRef.current.position.x, meshRef.current.position.y, 0] });
     } else {
       setDragging(false);
       setIsDraggingNote(false);

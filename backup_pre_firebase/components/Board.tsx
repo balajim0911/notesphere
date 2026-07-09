@@ -1,6 +1,6 @@
 
-import React, { Suspense, useMemo, useState, useEffect } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import React, { Suspense, useMemo } from 'react';
+import { Canvas } from '@react-three/fiber';
 import { OrbitControls, ContactShadows, Environment, Grid, Stars, Sparkles } from '@react-three/drei';
 import { useStore } from '../store/useStore';
 import { StickyNote } from './StickyNote';
@@ -22,26 +22,6 @@ const AtmosphericParticles = () => {
   );
 };
 
-const CameraTracker = () => {
-  const { camera } = useThree();
-  const setCameraCenter = useStore((state) => state.setCameraCenter);
-
-  useFrame(() => {
-    // Project camera optical center vector onto the Z=0 plane
-    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    if (Math.abs(dir.z) > 0.001) {
-      const t = -camera.position.z / dir.z;
-      const x = camera.position.x + dir.x * t;
-      const y = camera.position.y + dir.y * t;
-      if (Number.isFinite(x) && Number.isFinite(y)) {
-        setCameraCenter([x, y]);
-      }
-    }
-  });
-
-  return null;
-};
-
 export const Board: React.FC = () => {
   const { 
     notes, 
@@ -53,17 +33,6 @@ export const Board: React.FC = () => {
     isDraggingNote, 
     setActiveNoteId 
   } = useStore();
-
-  const [initialCameraZ, setInitialCameraZ] = useState(15);
-
-  useEffect(() => {
-    const handleResize = () => {
-      setInitialCameraZ(window.innerWidth < 768 ? 22 : 15);
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const filteredNotes = useMemo(() => {
     return notes
@@ -90,19 +59,18 @@ export const Board: React.FC = () => {
   const bgColor = isDarkMode ? '#020617' : '#f8fafc';
 
   return (
-    <div className="absolute inset-0 z-0 touch-none">
+    <div className="absolute inset-0 z-0">
       {/* Cinematic Vignette Overlay */}
       <div className="absolute inset-0 pointer-events-none z-10 shadow-[inset_0_0_200px_rgba(0,0,0,0.15)] dark:shadow-[inset_0_0_250px_rgba(0,0,0,0.5)]" />
       
       <Canvas 
         shadows 
         dpr={[1, 2]} 
-        camera={{ position: [0, 0, initialCameraZ], fov: 35 }}
+        camera={{ position: [0, 0, 15], fov: 35 }}
         onPointerMissed={() => setActiveNoteId(null)}
       >
         <Color attach="background" args={[bgColor]} />
         <FogExp2 attach="fog" args={[bgColor, 0.012]} />
-        <CameraTracker />
         
         <Suspense fallback={null}>
           <AmbientLight intensity={isDarkMode ? 0.35 : 1.4} />
@@ -142,10 +110,6 @@ export const Board: React.FC = () => {
           maxDistance={45} 
           dampingFactor={0.05}
           rotateSpeed={0.8}
-          maxAzimuthAngle={Math.PI / 2.5}
-          minAzimuthAngle={-Math.PI / 2.5}
-          maxPolarAngle={Math.PI / 2 + 0.4}
-          minPolarAngle={Math.PI / 2 - 0.4}
         />
       </Canvas>
     </div>

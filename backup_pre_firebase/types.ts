@@ -16,15 +16,8 @@ export interface Note {
   fontStyle: 'sans' | 'handwriting' | 'mono';
 }
 
-export interface UserProfile {
-  uid: string;
-  email: string | null;
-  displayName?: string | null;
-}
-
 export type FilterStatus = 'all' | 'favorites' | 'pinned';
 export type SortType = 'recent' | 'pinned' | 'favorites' | 'az';
-export type SyncStatusType = 'synced' | 'syncing' | 'offline' | 'error';
 
 export interface WorkspaceState {
   notes: Note[];
@@ -37,11 +30,6 @@ export interface WorkspaceState {
   activeNoteId: string | null;
   isDraggingNote: boolean;
   maxZIndex: number;
-  user: UserProfile | null;
-  syncStatus: SyncStatusType;
-  setUser: (user: UserProfile | null) => void;
-  setSyncStatus: (status: SyncStatusType) => void;
-  setNotesSilently: (notes: Note[]) => void;
   addNote: (note: Partial<Note>) => void;
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
@@ -54,6 +42,4 @@ export interface WorkspaceState {
   setActiveNoteId: (id: string | null) => void;
   setIsDraggingNote: (isDragging: boolean) => void;
   bringToFront: (id: string) => void;
-  cameraCenter: [number, number];
-  setCameraCenter: (center: [number, number]) => void;
 }

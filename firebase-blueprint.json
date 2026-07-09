@@ -1,0 +1,64 @@
+{
+  "firestore": {
+    "collections": {
+      "notes": {
+        "description": "Sticky notes in NoteSphere 3D belonging to users",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "userId": { "type": "string" },
+            "content": { "type": "string" },
+            "color": { "type": "string" },
+            "position": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "rotation": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "scale": { "type": "number" },
+            "category": { "type": "string" },
+            "tags": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "isPinned": { "type": "boolean" },
+            "isFavorite": { "type": "boolean" },
+            "lastModified": { "type": "number" },
+            "zIndex": { "type": "number" },
+            "textureType": { "type": "string" },
+            "fontStyle": { "type": "string" }
+          },
+          "required": ["id", "userId", "content", "color", "position", "lastModified", "zIndex"]
+        },
+        "indexes": [
+          {
+            "fields": [
+              { "fieldPath": "userId", "order": "ASCENDING" },
+              { "fieldPath": "lastModified", "order": "DESCENDING" }
+            ]
+          }
+        ]
+      },
+      "users": {
+        "description": "User profiles containing names and emails",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "uid": { "type": "string" },
+            "displayName": { "type": "string" },
+            "email": { "type": "string" },
+            "createdAt": { "type": "number" }
+          },
+          "required": ["uid", "displayName", "email", "createdAt"]
+        }
+      }
+    }
+  }
+}
