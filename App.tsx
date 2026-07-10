@@ -57,7 +57,7 @@ const NoteSphereIcon = () => (
 );
 
 const App: React.FC = () => {
-  const { isDarkMode, user, syncStatus } = useStore();
+  const { isDarkMode, user, syncStatus, setUser, setNotesSilently } = useStore();
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
 
@@ -72,7 +72,7 @@ const App: React.FC = () => {
   }, [user]);
 
   return (
-    <div className={`relative w-full h-screen overflow-hidden ${isDarkMode ? 'dark bg-[#020617]' : 'bg-[#f1f5f9]'}`}>
+    <div className={`relative w-full h-screen overflow-hidden ${isDarkMode ? 'dark bg-[#020617]' : 'bg-[#ffffff]'}`}>
       {/* 3D Background Layer */}
       <Board />
 
@@ -80,7 +80,11 @@ const App: React.FC = () => {
       <div className="fixed inset-0 pointer-events-none z-[100]">
         <div className="p-4 md:p-6">
           {/* Compact Logo & Auth Bar */}
-          <div className="bg-white/90 dark:bg-slate-900/70 backdrop-blur-3xl pointer-events-auto cursor-default inline-flex items-center gap-3.5 px-4 py-2.5 rounded-[1.75rem] shadow-xl border border-white/60 dark:border-slate-700/60 transition-all duration-300 hover:shadow-blue-500/10 dark:hover:border-blue-500/30 group">
+          <div className={`backdrop-blur-3xl pointer-events-auto cursor-default inline-flex items-center gap-3.5 px-4 py-2.5 rounded-[1.75rem] shadow-xl border transition-all duration-300 hover:shadow-blue-500/10 group ${
+            isDarkMode 
+              ? 'bg-slate-900/70 border-slate-700/60 hover:border-blue-500/30' 
+              : 'bg-white border-slate-200/80 shadow-md'
+          }`}>
             
             {/* Logo Icon Container */}
             <div className="relative w-10 h-10 bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 transform rotate-2 border-b-2 border-indigo-900 transition-all duration-500 group-hover:rotate-0 group-hover:scale-105 group-hover:shadow-indigo-500/40">
@@ -90,7 +94,12 @@ const App: React.FC = () => {
             
             {/* NoteSphere Text */}
             <div className="flex flex-col pr-1">
-              <h1 className="text-lg md:text-xl font-black text-slate-950 dark:text-white leading-none tracking-tight transition-colors duration-300 group-hover:text-blue-700 dark:group-hover:text-blue-400 drop-shadow-sm">
+              <h1 
+                className="text-lg md:text-xl font-black text-slate-950 dark:text-white leading-none tracking-tight transition-colors duration-300 group-hover:text-blue-700 dark:group-hover:text-blue-400 drop-shadow-sm"
+                style={{
+                  textShadow: '-1px -1px 0 #93c5fd, 1px -1px 0 #93c5fd, -1px 1px 0 #93c5fd, 1px 1px 0 #93c5fd'
+                }}
+              >
                 NoteSphere <span className="text-blue-700 dark:text-blue-400 font-bold italic transition-all duration-300 group-hover:pl-1 tracking-wider">3D</span>
               </h1>
               <div className="flex items-center gap-1.5 mt-1">
@@ -120,17 +129,36 @@ const App: React.FC = () => {
               {user ? (
                 <div className="flex items-center gap-3">
                   <div className="flex flex-col items-end hidden sm:flex">
-                    <p className="text-[10px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-wider max-w-[120px] truncate">
-                      {user.displayName || user.email?.split('@')[0]}
+                    <p className="text-[11px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider max-w-[120px] truncate">
+                      {user.isGuest ? 'Guest User' : (user.displayName || user.email?.split('@')[0])}
                     </p>
-                    <p className="text-[8px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest flex items-center gap-1">
-                      <span className={`w-1 h-1 rounded-full bg-emerald-500 ${syncStatus === 'syncing' ? 'animate-ping' : ''}`} />
-                      {syncStatus === 'syncing' ? 'Syncing...' : 'Synced'}
-                    </p>
+                    {user.isGuest ? (
+                      <p className="text-[8px] font-bold uppercase tracking-widest flex items-center gap-1 text-amber-500">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        Offline Saved
+                      </p>
+                    ) : (
+                      <p className={`text-[8px] font-bold uppercase tracking-widest flex items-center gap-1 ${
+                        syncStatus === 'error' ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          syncStatus === 'error' ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'
+                        } ${syncStatus === 'syncing' ? 'animate-ping' : ''}`} />
+                        {syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'error' ? 'Sync Error' : 'Synced'}
+                      </p>
+                    )}
                   </div>
                   <button
-                    onClick={() => signOut(auth)}
-                    className="h-8 px-3.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-100 dark:bg-slate-850 hover:bg-red-500 hover:text-white dark:hover:bg-red-600 text-slate-700 dark:text-slate-300 transition-all cursor-pointer border border-slate-200/50 dark:border-slate-800"
+                    onClick={async () => {
+                      if (user.isGuest) {
+                        setUser(null);
+                        const { INITIAL_NOTES } = await import('./constants');
+                        setNotesSilently(INITIAL_NOTES.map((n, i) => ({ ...n, zIndex: i })));
+                      } else {
+                        await signOut(auth);
+                      }
+                    }}
+                    className="h-8 px-3.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-100 dark:bg-slate-800 hover:bg-red-600 hover:text-white dark:hover:bg-red-600 dark:hover:text-white text-slate-950 dark:text-white transition-all cursor-pointer border border-slate-300 dark:border-slate-700"
                   >
                     Sign Out
                   </button>

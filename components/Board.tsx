@@ -13,6 +13,8 @@ const Color = 'color' as any;
 const FogExp2 = 'fogExp2' as any;
 
 const AtmosphericParticles = () => {
+  const isDarkMode = useStore((state) => state.isDarkMode);
+  if (!isDarkMode) return null;
   return (
     <Group>
       <Sparkles count={400} scale={50} size={1.2} speed={0.3} opacity={0.15} color="#ffffff" />
@@ -51,7 +53,8 @@ export const Board: React.FC = () => {
     sortBy,
     isDarkMode, 
     isDraggingNote, 
-    setActiveNoteId 
+    setActiveNoteId,
+    selectedNoteId
   } = useStore();
 
   const [initialCameraZ, setInitialCameraZ] = useState(15);
@@ -68,7 +71,7 @@ export const Board: React.FC = () => {
   const filteredNotes = useMemo(() => {
     return notes
       .filter(n => {
-        const matchesSearch = !searchQuery || n.content.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesSearch = !searchQuery || (n.content && n.content.toLowerCase().includes(searchQuery.toLowerCase()));
         const matchesCategory = !filterCategory || n.category === filterCategory;
         const matchesStatus = filterStatus === 'all' || 
                               (filterStatus === 'pinned' && n.isPinned) || 
@@ -87,12 +90,12 @@ export const Board: React.FC = () => {
       });
   }, [notes, searchQuery, filterCategory, filterStatus, sortBy]);
 
-  const bgColor = isDarkMode ? '#020617' : '#f8fafc';
+  const bgColor = isDarkMode ? '#020617' : '#ffffff';
 
   return (
     <div className="absolute inset-0 z-0 touch-none">
       {/* Cinematic Vignette Overlay */}
-      <div className="absolute inset-0 pointer-events-none z-10 shadow-[inset_0_0_200px_rgba(0,0,0,0.15)] dark:shadow-[inset_0_0_250px_rgba(0,0,0,0.5)]" />
+      <div className={`absolute inset-0 pointer-events-none z-10 ${isDarkMode ? 'shadow-[inset_0_0_250px_rgba(0,0,0,0.5)]' : ''}`} />
       
       <Canvas 
         shadows 
@@ -101,13 +104,13 @@ export const Board: React.FC = () => {
         onPointerMissed={() => setActiveNoteId(null)}
       >
         <Color attach="background" args={[bgColor]} />
-        <FogExp2 attach="fog" args={[bgColor, 0.012]} />
+        {isDarkMode && <FogExp2 attach="fog" args={[bgColor, 0.012]} />}
         <CameraTracker />
         
         <Suspense fallback={null}>
           <AmbientLight intensity={isDarkMode ? 0.35 : 1.4} />
           <PointLight position={[10, 10, 10]} intensity={isDarkMode ? 2.5 : 1.2} castShadow />
-          <PointLight position={[-15, -15, 8]} intensity={isDarkMode ? 1.5 : 0.6} color="#818cf8" />
+          <PointLight position={[-15, -15, 8]} intensity={isDarkMode ? 1.5 : 0.6} color={isDarkMode ? '#818cf8' : '#e2e8f0'} />
           
           <AtmosphericParticles />
           
@@ -117,10 +120,10 @@ export const Board: React.FC = () => {
             args={[100, 100]}
             sectionSize={10}
             sectionThickness={1.2}
-            sectionColor={isDarkMode ? '#1e293b' : '#cbd5e1'}
+            sectionColor={isDarkMode ? '#1e293b' : '#e2e8f0'}
             cellSize={2}
             cellThickness={0.6}
-            cellColor={isDarkMode ? '#0f172a' : '#f1f5f9'}
+            cellColor={isDarkMode ? '#0f172a' : '#f8fafc'}
             infiniteGrid
           />
 
@@ -131,13 +134,13 @@ export const Board: React.FC = () => {
           </Group>
 
           <ContactShadows position={[0, -11.9, 0]} opacity={0.3} scale={60} blur={3} far={20} />
-          <Environment preset={isDarkMode ? "night" : "apartment"} />
+          <Environment preset={isDarkMode ? "night" : "studio"} />
         </Suspense>
 
         <OrbitControls 
-          enabled={!isDraggingNote} 
-          enablePan={true} 
-          enableZoom={true} 
+          enabled={!isDraggingNote && selectedNoteId === null} 
+          enablePan={selectedNoteId === null} 
+          enableZoom={selectedNoteId === null} 
           minDistance={6} 
           maxDistance={45} 
           dampingFactor={0.05}

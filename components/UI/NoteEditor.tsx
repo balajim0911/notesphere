@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Heart, Pin, Check, Trash2, Box, Type as TypeIcon, Info, Sparkles, Loader2, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { COLORS, CATEGORIES, FONTS, TEXTURES } from '../../constants';
-import { GoogleGenAI } from "@google/genai";
 
 export const NoteEditor: React.FC = () => {
   const { selectedNoteId, setSelectedNoteId, notes, updateNote, deleteNote, isDarkMode } = useStore();
@@ -47,17 +46,17 @@ export const NoteEditor: React.FC = () => {
     if (!localContent.trim()) return;
     setIsRefining(true);
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-      if (!apiKey) {
-        throw new Error("Gemini API key is missing. Please configure GEMINI_API_KEY in settings.");
-      }
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: `Clean up, structure, and professionalize the following note content. If it is a list, make it clear bullet points. If it is a thought, make it more articulate. Keep it concise but insightful. Content: "${localContent}"`,
+      const response = await fetch('/api/ai/refine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: localContent }),
       });
-      
-      const refinedText = response.text || localContent;
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Server error during refinement');
+      }
+      const data = await response.json();
+      const refinedText = data.refinedText || localContent;
       setLocalContent(refinedText);
       updateNote(note.id, { content: refinedText });
     } catch (err) {

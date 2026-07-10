@@ -268,8 +268,30 @@ export const StickyNote: React.FC<StickyNoteProps> = ({ note }) => {
     }
   };
 
-  const textColor = isDarkMode ? "#ffffff" : "#0f172a";
+  // Dynamic contrast text color selection for pristine readability on all backgrounds (including translucent crystal glass)
+  const getNoteContrastColor = (hexColor: string) => {
+    if (!isDarkMode) {
+      return '#000000';
+    }
+    try {
+      const cleanHex = hexColor.replace('#', '');
+      const r = parseInt(cleanHex.substring(0, 2), 16) || 0;
+      const g = parseInt(cleanHex.substring(2, 4), 16) || 0;
+      const b = parseInt(cleanHex.substring(4, 6), 16) || 0;
+      // Relative luminance formula
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.62 ? '#020617' : '#ffffff';
+    } catch {
+      return isDarkMode ? '#ffffff' : '#000000';
+    }
+  };
+
+  const textColor = getNoteContrastColor(note.color);
   const textOpacity = isDimmed ? 0.15 : 1.0;
+
+  // Adaptive outline to ensure crisp text visibility regardless of dynamic lighting
+  const outlineColor = textColor === '#ffffff' ? '#000000' : '#ffffff';
+  const outlineWidth = note.textureType === 'glass' ? 0.016 : 0.008;
 
   return (
     <Group 
@@ -314,6 +336,9 @@ export const StickyNote: React.FC<StickyNoteProps> = ({ note }) => {
         clipRect={[-0.95, -0.7, 0.95, 0.8]} 
         fillOpacity={textOpacity}
         font={note.fontStyle === 'handwriting' ? 'https://fonts.gstatic.com/s/shadowsintolight/v15/mjt7m614_P6tAzMvPiFzL2726nS2pw.woff' : undefined}
+        outlineWidth={outlineWidth}
+        outlineColor={outlineColor}
+        outlineOpacity={isDimmed ? 0.2 : (note.textureType === 'glass' ? 0.95 : 0.6)}
       >
         {displayContent}
       </Text>

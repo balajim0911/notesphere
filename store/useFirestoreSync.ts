@@ -1,15 +1,28 @@
 import { useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, onSnapshot, doc, setDoc, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, setDoc, getDocs, deleteDoc, getDocFromServer } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { useStore } from './useStore';
 import { Note } from '../types';
+import { OperationType, handleFirestoreError } from './firestoreErrorHandler';
+
+// Test connection on module boot to satisfy firebase-integration skill constraint
+const testConnection = async () => {
+  try {
+    await getDocFromServer(doc(db, 'test_connection_placeholder', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn("Firebase client is currently offline:", error.message);
+    }
+  }
+};
+testConnection();
 
 const isUnmodifiedInitialNote = (note: Note) => {
-  if (note.id === '1' && note.content === 'Welcome to NoteSphere 3D!\n\nDouble click any note to edit.\nDrag to move around.') {
+  if (String(note.id) === '1' && note.content === 'Welcome to NoteSphere 3D!\n\nDouble click any note to edit.\nDrag to move around.') {
     return true;
   }
-  if (note.id === '2' && note.content === 'Try searching notes or adding new ones from the toolbar below.') {
+  if (String(note.id) === '2' && note.content === 'Try searching notes or adding new ones from the toolbar below.') {
     return true;
   }
   return false;
@@ -94,6 +107,10 @@ export function useFirestoreSync() {
           });
         });
       } else {
+        const currentUser = useStore.getState().user;
+        if (currentUser?.isGuest) {
+          return;
+        }
         setUser(null);
         // Clear user-specific active notes on logout to protect user privacy
         // and restore default initial notes for an anonymous session
@@ -113,51 +130,53 @@ export function useFirestoreSync() {
 
   // 2. Synchronize with Firestore when user changes
   useEffect(() => {
-    if (!userUid) {
+    if (!userUid || user?.isGuest) {
       setSyncStatus('offline');
       return;
     }
 
     let isSubscribed = true;
     let unsubscribeNotes: (() => void) | null = null;
+    const serverConfirmedNoteIds = new Set<string>();
 
     const initializeSync = async () => {
       try {
         setSyncStatus('syncing');
 
-        // --- AUTOMATED FRESH RESET FOR USER baburaom801@gmail.com TO RECTIFY CORRUPT NOTES ---
-        if (user?.email === 'baburaom801@gmail.com' && !localStorage.getItem('notesphere_cleanup_baburaom801')) {
-          console.log("Auto-clearing database notes for baburaom801@gmail.com to resolve corruption...");
-          const qNotes = query(collection(db, 'notes'), where('userId', '==', userUid));
-          const notesSnap = await getDocs(qNotes);
-          if (!notesSnap.empty) {
-            const deletePromises = [];
-            notesSnap.forEach((docSnap) => {
-              deletePromises.push(deleteDoc(doc(db, 'notes', docSnap.id)));
-            });
-            await Promise.all(deletePromises);
-            console.log(`Deleted ${notesSnap.size} corrupt notes for baburaom801@gmail.com`);
-          }
-          
-          // Also let's clear the user document once to ensure clean start
-          const userDocRef = doc(db, 'users', userUid);
-          await deleteDoc(userDocRef);
-          console.log(`Deleted user profile document for ${userUid}`);
-          
-          localStorage.setItem('notesphere_cleanup_baburaom801', 'true');
-        }
-        // -------------------------------------------------------------------------------------
+        // Sync database setup without automated fresh reset block for baburaom801@gmail.com to ensure no data loss.
 
         const q = query(collection(db, 'notes'), where('userId', '==', userUid));
         
-        // 1. One-time fetch to merge local and remote notes safely without race conditions
-        const snapshot = await getDocs(q);
+        // 1. One-time fetch to merge local and remote notes safely without race conditions.
+        // We use a Promise.race with a 5-second timeout to prevent the app from being stuck
+        // in the 'syncing' state if the device's connection is firewalled, blocked by an adblocker,
+        // or experiencing temporary network/CORS issues.
+        const timeoutPromise = (ms: number) => new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Firestore initial fetch timed out')), ms)
+        );
+
+        let snapshot;
+        try {
+          snapshot = await Promise.race([
+            getDocs(q),
+            timeoutPromise(5000)
+          ]);
+        } catch (fetchErr) {
+          console.warn("Firestore initial fetch failed or timed out. Falling back to local state and starting live subscription:", fetchErr);
+          // Create an empty dummy snapshot so the merge logic safely falls back to local notes
+          snapshot = {
+            forEach: () => {}
+          } as any;
+        }
+
         if (!isSubscribed) return;
 
         const firestoreNotesMap = new Map<string, Note>();
-        snapshot.forEach((docSnap) => {
+        const prefix = `${userUid}_`;
+        snapshot.forEach((docSnap: any) => {
           const data = docSnap.data();
-          const noteId = data.id || (docSnap.id.includes('_') ? docSnap.id.split('_').slice(1).join('_') : docSnap.id);
+          const noteId = String(data.id || (docSnap.id.startsWith(prefix) ? docSnap.id.substring(prefix.length) : docSnap.id));
+          serverConfirmedNoteIds.add(noteId);
           firestoreNotesMap.set(noteId, {
             id: noteId,
             content: data.content || '',
@@ -188,7 +207,7 @@ export function useFirestoreSync() {
             continue;
           }
 
-          const dbNote = firestoreNotesMap.get(localNote.id);
+          const dbNote = firestoreNotesMap.get(String(localNote.id));
           if (dbNote) {
             if (localNote.lastModified > dbNote.lastModified) {
               finalNotesList.push(localNote);
@@ -205,7 +224,7 @@ export function useFirestoreSync() {
 
         // Add remaining firestore notes
         for (const [id, dbNote] of firestoreNotesMap.entries()) {
-          if (!localNotes.some(n => n.id === id)) {
+          if (!localNotes.some(n => String(n.id) === String(id))) {
             finalNotesList.push(dbNote);
           }
         }
@@ -221,17 +240,20 @@ export function useFirestoreSync() {
         // Set state immediately so user sees their combined notes right away
         setNotesSilently(finalNotesList);
 
-        // Upload any unsynced or updated notes to Firestore
+        // Upload any unsynced or updated notes to Firestore in the background.
+        // We do not await this to prevent slow connections from delaying the 'synced' transition.
         if (notesToUpload.length > 0) {
           const uploadPromises = notesToUpload.map(note => 
             setDoc(doc(db, 'notes', `${userUid}_${note.id}`), { ...note, userId: userUid })
+              .catch((err) => handleFirestoreError(err, OperationType.WRITE, `notes/${userUid}_${note.id}`))
           );
-          await Promise.all(uploadPromises);
+          Promise.all(uploadPromises);
         }
 
         setSyncStatus('synced');
 
         // 2. Subscribe to live changes only AFTER the initial merge is complete
+        const snapshotPrefix = `${userUid}_`;
         unsubscribeNotes = onSnapshot(q, (liveSnapshot) => {
           if (!isSubscribed) return;
 
@@ -240,7 +262,12 @@ export function useFirestoreSync() {
 
           liveSnapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            const noteId = data.id || (docSnap.id.includes('_') ? docSnap.id.split('_').slice(1).join('_') : docSnap.id);
+            const noteId = String(data.id || (docSnap.id.startsWith(snapshotPrefix) ? docSnap.id.substring(snapshotPrefix.length) : docSnap.id));
+            
+            // Only mark as confirmed if it has been successfully synchronized on the server
+            if (!docSnap.metadata.hasPendingWrites) {
+              serverConfirmedNoteIds.add(noteId);
+            }
             
             let content = data.content || '';
             let lastModified = data.lastModified || Date.now();
@@ -257,7 +284,7 @@ export function useFirestoreSync() {
             let tags = Array.isArray(data.tags) ? data.tags : [];
 
             // Retrieve local note to compare timestamps or preserve edit state
-            const localNote = useStore.getState().notes.find(n => n.id === noteId);
+            const localNote = useStore.getState().notes.find(n => String(n.id) === noteId);
 
             // If this note is currently being edited in the NoteEditor, OR if the local note has a
             // newer modification timestamp (e.g., pending local updates, debounced text, in-flight moves),
@@ -298,10 +325,19 @@ export function useFirestoreSync() {
             } as Note);
           });
 
+          // Keep any local notes that are NOT in the Firestore live snapshot (prevents them from disappearing)
+          const localNotes = useStore.getState().notes;
+          for (const localNote of localNotes) {
+            const existsInFirestore = fetchedNotes.some(n => String(n.id) === String(localNote.id));
+            if (!existsInFirestore) {
+              fetchedNotes.push(localNote);
+            }
+          }
+
           setNotesSilently(fetchedNotes);
           setSyncStatus('synced');
         }, (error) => {
-          console.error("Firestore live sync error:", error);
+          console.error("Firestore onSnapshot subscription failed:", error);
           setSyncStatus('error');
         });
 

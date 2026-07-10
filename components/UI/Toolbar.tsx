@@ -4,7 +4,6 @@ import { Plus, Search, Moon, Sun, Filter, ChevronDown, Trash2, SortAsc, Sparkles
 import { useStore } from '../../store/useStore';
 import { COLORS, CATEGORIES } from '../../constants';
 import { SortType, Note } from '../../types';
-import { GoogleGenAI, Type } from "@google/genai";
 
 export const Toolbar: React.FC = () => {
   const { 
@@ -64,32 +63,17 @@ export const Toolbar: React.FC = () => {
     
     setIsGenerating(true);
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-      if (!apiKey) {
-        throw new Error("Gemini API key is missing. Please configure GEMINI_API_KEY in your settings.");
-      }
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: `Generate 3 creative, short, and distinct sticky note ideas about this topic: "${aiPrompt}". Return a JSON array of objects with keys "content", "category", and "color" (use valid hex codes like #60a5fa, #fb7185, #34d399, #fbbf24, #a78bfa). Keep content under 15 words per note.`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                content: { type: Type.STRING },
-                category: { type: Type.STRING },
-                color: { type: Type.STRING }
-              },
-              required: ["content", "category", "color"]
-            }
-          }
-        }
+      const response = await fetch('/api/ai/brainstorm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: aiPrompt }),
       });
-
-      const ideas = JSON.parse(response.text);
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Server error during generation');
+      }
+      
+      const ideas = await response.json();
       ideas.forEach((idea: any, index: number) => {
         const [cx, cy] = cameraCenter || [0, 0];
         addNote({
@@ -175,14 +159,18 @@ export const Toolbar: React.FC = () => {
           
           <div className="relative group">
             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-              <Search className="w-3.5 h-3.5 text-black dark:text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+              <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
             </div>
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search..."
-              className="h-10 pl-8 pr-3 bg-white/50 dark:bg-slate-800/40 rounded-full text-xs font-bold border-none focus:ring-2 focus:ring-indigo-500/50 transition-all w-20 xs:w-24 sm:w-32 md:w-56 placeholder:text-slate-700 dark:text-slate-400 text-black dark:text-white"
+              className={`h-10 pl-8 pr-3 rounded-full text-xs font-bold transition-all w-20 xs:w-24 sm:w-32 md:w-56 outline-none ${
+                isDarkMode 
+                  ? 'bg-slate-800/40 border-none text-white placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500/50' 
+                  : 'bg-white border border-slate-200 text-slate-950 placeholder:text-slate-400 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'
+              }`}
             />
           </div>
 
@@ -194,7 +182,12 @@ export const Toolbar: React.FC = () => {
             className="h-10 px-2 sm:px-3.5 rounded-full flex items-center gap-1.5 hover:bg-indigo-600/10 transition-all group relative"
           >
             <Sparkles className="w-4 h-4 text-black dark:text-indigo-500 group-hover:text-indigo-700 group-hover:scale-125 transition-all" />
-            <span className="text-[10px] font-black uppercase tracking-wider hidden md:block text-black dark:text-white group-hover:text-indigo-700 transition-colors">Magic</span>
+            <span 
+              className="text-[10px] font-black uppercase tracking-wider hidden md:block text-black dark:text-white group-hover:text-indigo-700 transition-colors"
+              style={{ textShadow: '-1px -1px 0 #93c5fd, 1px -1px 0 #93c5fd, -1px 1px 0 #93c5fd, 1px 1px 0 #93c5fd' }}
+            >
+              Magic
+            </span>
           </button>
 
           <div className="w-[1px] h-6 bg-slate-300 dark:bg-slate-700/50 mx-0.5" />
@@ -205,9 +198,14 @@ export const Toolbar: React.FC = () => {
               className={`h-10 px-2.5 sm:px-3.5 rounded-full flex items-center gap-1.5 transition-all group ${sortBy !== 'recent' ? 'bg-indigo-600/10' : 'hover:bg-white/40 dark:hover:bg-slate-700/40'}`}
             >
               <SortAsc className={`w-4 h-4 transition-colors ${sortBy !== 'recent' ? 'text-indigo-600' : 'text-black dark:text-slate-300 group-hover:text-indigo-700'}`} />
-              <span className={`text-[10px] font-black uppercase tracking-wider hidden md:block transition-colors ${
-                sortBy !== 'recent' ? 'text-indigo-600' : 'text-black dark:text-white group-hover:text-indigo-700'
-              }`}>Sort</span>
+              <span 
+                className={`text-[10px] font-black uppercase tracking-wider hidden md:block transition-colors ${
+                  sortBy !== 'recent' ? 'text-indigo-600' : 'text-black dark:text-white group-hover:text-indigo-700'
+                }`}
+                style={{ textShadow: '-1px -1px 0 #93c5fd, 1px -1px 0 #93c5fd, -1px 1px 0 #93c5fd, 1px 1px 0 #93c5fd' }}
+              >
+                Sort
+              </span>
             </button>
             {isSortOpen && (
               <div className="absolute bottom-full mb-3 left-0 w-52 glass rounded-2xl p-2 shadow-2xl border-white/50 animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -232,9 +230,14 @@ export const Toolbar: React.FC = () => {
               className={`h-10 px-2.5 sm:px-3.5 rounded-full flex items-center gap-1.5 transition-all group ${filterCategory ? 'bg-indigo-600/10' : 'hover:bg-white/40 dark:hover:bg-slate-700/40'}`}
             >
               <Filter className={`w-4 h-4 transition-colors ${filterCategory ? 'text-indigo-600' : 'text-black dark:text-slate-300 group-hover:text-indigo-700'}`} />
-              <span className={`text-[10px] font-black uppercase tracking-wider hidden md:block transition-colors ${
-                filterCategory ? 'text-indigo-600' : 'text-black dark:text-white group-hover:text-indigo-700'
-              }`}>{filterCategory || 'Filter'}</span>
+              <span 
+                className={`text-[10px] font-black uppercase tracking-wider hidden md:block transition-colors ${
+                  filterCategory ? 'text-indigo-600' : 'text-black dark:text-white group-hover:text-indigo-700'
+                }`}
+                style={{ textShadow: '-1px -1px 0 #93c5fd, 1px -1px 0 #93c5fd, -1px 1px 0 #93c5fd, 1px 1px 0 #93c5fd' }}
+              >
+                {filterCategory || 'Filter'}
+              </span>
               <ChevronDown className={`w-3 h-3 transition-colors ${filterCategory ? 'text-indigo-600' : 'text-black dark:text-slate-400 group-hover:text-indigo-700'}`} />
             </button>
             {isCategoryOpen && (
